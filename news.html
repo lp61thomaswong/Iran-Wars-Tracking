@@ -323,6 +323,9 @@
         .source-cnn { background: rgba(204, 0, 0, 0.15); color: #cc0000; }
         .source-nyt { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
         .source-google { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
+        .source-gdelt { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+        .source-youtube { background: rgba(255, 0, 0, 0.15); color: #ff4444; }
+        .source-x { background: rgba(200, 200, 200, 0.12); color: #e0e0e0; }
         .source-default { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
 
         .news-category {
@@ -627,7 +630,7 @@
     <div class="header-top">
         <div>
             <h1>Iran Real-Time News Monitor</h1>
-            <div class="header-subtitle">Aggregating from Reuters, AP, BBC, Al Jazeera, The Guardian, France24, DW & more</div>
+            <div class="header-subtitle">⚡ GDELT real-time + 𝕏 X/Twitter + ▶ YouTube + BBC, Al Jazeera, Guardian, France24, DW, AP, Google News</div>
         </div>
         <div class="header-controls">
             <div class="live-badge">
@@ -674,6 +677,9 @@
     <button class="filter-btn" data-source="france24" onclick="setFilter('france24', this)">France24</button>
     <button class="filter-btn" data-source="dw" onclick="setFilter('dw', this)">DW</button>
     <button class="filter-btn" data-source="google" onclick="setFilter('google', this)">Google News</button>
+    <button class="filter-btn" data-source="youtube" onclick="setFilter('youtube', this)" style="border-color:rgba(255,0,0,0.3);">▶ YouTube</button>
+    <button class="filter-btn" data-source="x" onclick="setFilter('x', this)" style="border-color:rgba(200,200,200,0.3);">𝕏 X/Twitter</button>
+    <button class="filter-btn" data-source="gdelt" onclick="setFilter('gdelt', this)" style="border-color:rgba(34,197,94,0.3);">⚡ GDELT Real-Time</button>
     <input type="text" class="search-input" id="searchInput" placeholder="Search headlines..." oninput="filterNews()">
 </div>
 
@@ -717,17 +723,24 @@
 </div>
 
 <div class="disclaimer">
-    News aggregated from public RSS feeds of major international news outlets. Refresh interval: 60 seconds.
+    News aggregated from public RSS feeds of major international news outlets. Auto-refresh every 30 seconds. Relative times update every 15 seconds.
     All content belongs to respective publishers. Click headlines to read full articles.
 </div>
 
 <script>
 // ============================================================
-// NEWS SOURCES — using rss2json.com API (free, reliable, CORS-friendly)
-// Each source uses a direct RSS feed URL converted via rss2json
+// NEWS SOURCES — Multi-proxy approach for maximum freshness
+// Uses multiple RSS-to-JSON APIs + cache-busting to get the newest articles
 // ============================================================
 
-const RSS2JSON_BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
+// Simple request helper
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+let requestCount = 0;
+
+// Primary proxy: rss2json (most reliable, handles RSS+Atom)
+const RSS2JSON = url => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&_t=${Date.now()}`;
+// Fallback proxy
+const CODETABS = url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
 
 const NEWS_SOURCES = [
     {
@@ -746,16 +759,6 @@ const NEWS_SOURCES = [
         cssClass: 'source-bbc',
         feeds: [
             'https://feeds.bbci.co.uk/news/world/middle_east/rss.xml'
-        ],
-        status: 'loading',
-        articles: []
-    },
-    {
-        id: 'reuters',
-        name: 'Reuters',
-        cssClass: 'source-reuters',
-        feeds: [
-            'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best'
         ],
         status: 'loading',
         articles: []
@@ -805,18 +808,206 @@ const NEWS_SOURCES = [
         name: 'Google News',
         cssClass: 'source-google',
         feeds: [
-            'https://news.google.com/rss/search?q=iran+when:1d&hl=en-US&gl=US&ceid=US:en'
+            'https://news.google.com/rss/search?q=iran+war+OR+iran+strike+OR+iran+nuclear+when:3h&hl=en-US&gl=US&ceid=US:en',
+            'https://news.google.com/rss/search?q=iran+when:12h&hl=en-US&gl=US&ceid=US:en'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'reuters',
+        name: 'Reuters',
+        cssClass: 'source-reuters',
+        feeds: [
+            'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'youtube',
+        name: 'YouTube',
+        cssClass: 'source-youtube',
+        feeds: [
+            // Al Jazeera English (most active on Iran)
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCNye-wNBqNL5ZzHSJj3l8Bg',
+            // WION (great Iran/Middle East coverage)
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UC_gUM8rL-Lrg6O3adPW9K1g',
+            // Sky News
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCoMdktPbSTixAyNGwb-UYkQ',
+            // TRT World
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UC7fWeaHhqgM4Lba7TKVZ4GA',
         ],
         status: 'loading',
         articles: []
     }
 ];
 
+// ============================================================
+// X (TWITTER) — Via Google News RSS filtered for X/Twitter sources
+// ============================================================
+
+async function fetchXPosts() {
+    const articles = [];
+    const seenTitles = new Set();
+
+    // Use Google News RSS to find Iran tweets being reported
+    const xFeeds = [
+        'https://news.google.com/rss/search?q=iran+site:x.com+OR+site:twitter.com+when:1d&hl=en-US&gl=US&ceid=US:en',
+        'https://news.google.com/rss/search?q=iran+war+OSINT+OR+breaking+when:3h&hl=en-US&gl=US&ceid=US:en',
+    ];
+
+    for (const feedUrl of xFeeds) {
+        try {
+            const items = await fetchWithProxy(feedUrl);
+            if (!items || items.length === 0) continue;
+
+            for (const item of items) {
+                const title = (item.title || '').trim();
+                if (!title) continue;
+
+                const normTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 50);
+                if (seenTitles.has(normTitle)) continue;
+
+                const classification = classifyArticle(title, item.description || '');
+                if (!classification.isIranRelated) continue;
+                seenTitles.add(normTitle);
+
+                const date = item.pubDate ? new Date(item.pubDate) : new Date();
+                const author = item.author || '';
+
+                articles.push({
+                    id: item.link || title,
+                    title: title.length > 200 ? title.slice(0, 200) + '...' : title,
+                    link: item.link || '#',
+                    description: (item.description || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim().slice(0, 250),
+                    date,
+                    dateFormatted: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+                    dateRelative: getRelativeTime(date),
+                    source: 'x',
+                    sourceName: author ? `𝕏 ${author}` : '𝕏 X/Twitter',
+                    sourceCss: 'source-x',
+                    ...classification,
+                    isIranRelated: true
+                });
+            }
+        } catch (err) {
+            console.warn('X feed failed:', err.message);
+        }
+    }
+
+    return articles;
+}
+
+let xSourceStatus = { count: 0, status: 'loading' };
+
 let allArticles = [];
 let filteredArticles = [];
 let currentFilter = 'all';
 let refreshTimer = null;
-let countdownValue = 60;
+let countdownValue = 30;
+
+// ============================================================
+// GDELT API — Real-time global news (updates every 15 minutes, no CORS issues)
+// ============================================================
+
+const GDELT_QUERIES = [
+    { query: 'iran war OR iran strike OR iran military OR iran nuclear', timespan: '120min', label: 'Iran Conflict' },
+    { query: 'iran oil OR hezbollah OR houthi OR strait hormuz OR iran Israel', timespan: '180min', label: 'Iran Related' },
+];
+
+async function fetchGDELTviaProxy(gdeltUrl) {
+    // Use codetabs proxy (proven working for GDELT)
+    try {
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(gdeltUrl)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(timeout);
+
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (data && data.articles) return data;
+    } catch (err) {
+        // Fallback: thingproxy
+        try {
+            const proxyUrl = `https://thingproxy.freeboard.io/fetch/${gdeltUrl}`;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            const response = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
+            clearTimeout(timeout);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.articles) return data;
+            }
+        } catch (e) { /* give up */ }
+    }
+    return null;
+}
+
+async function fetchGDELT() {
+    const allGdeltArticles = [];
+    const seenUrls = new Set();
+
+    const fetches = GDELT_QUERIES.map(async (q) => {
+        try {
+            const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q.query + ' sourcelang:eng')}&mode=artlist&maxrecords=50&format=json&timespan=${q.timespan}&sort=datedesc`;
+
+            const data = await fetchGDELTviaProxy(gdeltUrl);
+            if (!data || !data.articles) return [];
+
+            return data.articles.map(a => {
+                if (seenUrls.has(a.url)) return null;
+                // Filter English only
+                if (a.language && a.language !== 'English') return null;
+                seenUrls.add(a.url);
+
+                const title = (a.title || '').trim();
+                if (!title) return null;
+
+                // GDELT date format: "20260315T041500Z"
+                let date = new Date();
+                if (a.seendate) {
+                    const s = a.seendate;
+                    try {
+                        date = new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T${s.slice(9,11)}:${s.slice(11,13)}:${s.slice(13,15)}Z`);
+                        if (isNaN(date.getTime())) date = new Date();
+                    } catch(e) { date = new Date(); }
+                }
+
+                let sourceDomain = '';
+                try { sourceDomain = new URL(a.url).hostname.replace('www.', ''); } catch(e) {}
+
+                const classification = classifyArticle(title, a.domain || '');
+
+                return {
+                    id: a.url,
+                    title,
+                    link: a.url,
+                    description: `${sourceDomain}${a.sourcecountry ? ' | ' + a.sourcecountry : ''}`,
+                    date,
+                    dateFormatted: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+                    dateRelative: getRelativeTime(date),
+                    source: 'gdelt',
+                    sourceName: sourceDomain.split('.')[0].toUpperCase() || 'GDELT',
+                    sourceCss: 'source-gdelt',
+                    ...classification,
+                    isIranRelated: true
+                };
+            }).filter(Boolean);
+        } catch (err) {
+            console.warn(`GDELT query "${q.label}" failed:`, err.message);
+            return [];
+        }
+    });
+
+    const results = await Promise.allSettled(fetches);
+    results.forEach(r => {
+        if (r.status === 'fulfilled') allGdeltArticles.push(...r.value);
+    });
+
+    return allGdeltArticles;
+}
 
 // ============================================================
 // KEYWORD DETECTION
@@ -861,39 +1052,103 @@ function classifyArticle(title, desc) {
 function getRelativeTime(date) {
     const now = new Date();
     const diff = now - date;
+    const secs = Math.floor(diff / 1000);
     const mins = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (mins < 1) return 'just now';
+    if (secs < 30) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
     if (mins < 60) return `${mins}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
+    if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+    if (days < 7) return `${days}d ${hours % 24}h ago`;
     return date.toLocaleDateString();
 }
 
+// Update relative times every 15 seconds without full re-render
+setInterval(() => {
+    document.querySelectorAll('.news-time-relative').forEach(el => {
+        const ts = parseInt(el.dataset.timestamp);
+        if (ts) el.textContent = getRelativeTime(new Date(ts));
+    });
+    // Update newest article stat
+    if (allArticles.length > 0) {
+        document.getElementById('newestArticle').textContent = getRelativeTime(allArticles[0].date);
+    }
+}, 15000);
+
 // ============================================================
-// FETCH USING rss2json.com API
+// FETCH WITH MULTI-PROXY — tries multiple proxies for freshest data
 // ============================================================
 
-async function fetchFeed(feedUrl, source) {
-    const apiUrl = RSS2JSON_BASE + encodeURIComponent(feedUrl);
+function parseRSSFromXML(xmlText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'text/xml');
+    const items = [];
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    // RSS 2.0 format
+    doc.querySelectorAll('item').forEach(item => {
+        const title = item.querySelector('title')?.textContent || '';
+        const link = item.querySelector('link')?.textContent || '';
+        const description = item.querySelector('description')?.textContent || '';
+        const pubDate = item.querySelector('pubDate')?.textContent || '';
+        const author = item.querySelector('author')?.textContent ||
+                       item.querySelector('dc\\:creator')?.textContent || '';
+        const content = item.querySelector('content\\:encoded')?.textContent || '';
+        items.push({ title, link, description: description || content, pubDate, author });
+    });
 
-    const response = await fetch(apiUrl, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-
-    if (data.status !== 'ok' || !data.items) {
-        throw new Error(data.message || 'Invalid response');
+    // Atom format fallback
+    if (items.length === 0) {
+        doc.querySelectorAll('entry').forEach(entry => {
+            const title = entry.querySelector('title')?.textContent || '';
+            const link = entry.querySelector('link')?.getAttribute('href') || '';
+            const description = entry.querySelector('summary')?.textContent ||
+                                entry.querySelector('content')?.textContent || '';
+            const pubDate = entry.querySelector('published')?.textContent ||
+                            entry.querySelector('updated')?.textContent || '';
+            items.push({ title, link, description, pubDate, author: '' });
+        });
     }
 
-    return data.items;
+    return items;
+}
+
+async function fetchWithProxy(feedUrl) {
+    // Try rss2json first (best for RSS/Atom feeds)
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(RSS2JSON(feedUrl), {
+            signal: controller.signal, cache: 'no-store'
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'ok' && data.items && data.items.length > 0) return data.items;
+        }
+    } catch (e) { /* try fallback */ }
+
+    // Fallback: codetabs proxy (returns raw XML)
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(CODETABS(feedUrl), {
+            signal: controller.signal, cache: 'no-store'
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+            const text = await response.text();
+            const items = parseRSSFromXML(text);
+            if (items.length > 0) return items;
+        }
+    } catch (e) { /* give up */ }
+
+    throw new Error('All proxies failed');
+}
+
+async function fetchFeed(feedUrl, source) {
+    return fetchWithProxy(feedUrl);
 }
 
 function processItems(items, source) {
@@ -921,13 +1176,18 @@ function processItems(items, source) {
         const classification = classifyArticle(title, desc);
 
         // For non-Iran-specific feeds, filter to Iran-related only
-        const iranSpecificSources = ['guardian']; // guardian/iran feed is already filtered
+        const iranSpecificSources = ['guardian'];
         if (!iranSpecificSources.includes(source.id) && !classification.isIranRelated) continue;
 
         // Detect actual source from Google News
         let sourceName = source.name;
         if (source.id === 'google' && item.author) {
             sourceName = item.author;
+        }
+
+        // For YouTube, prefix with video emoji and extract channel
+        if (source.id === 'youtube') {
+            sourceName = '▶ ' + (item.author || 'YouTube');
         }
 
         articles.push({
@@ -970,16 +1230,41 @@ async function fetchAllSources() {
     const btn = document.getElementById('refreshBtn');
     btn.disabled = true;
     btn.textContent = 'Fetching...';
-    document.getElementById('statusText').textContent = 'Fetching latest news from all sources...';
+    document.getElementById('statusText').textContent = 'Fetching real-time news from GDELT + RSS sources...';
 
-    // Fetch all sources in parallel
-    const results = await Promise.allSettled(
+    // Phase 1: RSS sources in parallel (rss2json handles most)
+    const rssResults = await Promise.allSettled(
         NEWS_SOURCES.map(source => fetchSource(source))
     );
 
+    // Phase 2: GDELT + X (after RSS to avoid proxy rate limits)
+    await delay(500);
+    const [gdeltArticles, xArticles] = await Promise.allSettled([
+        fetchGDELT(),
+        fetchXPosts()
+    ]);
+
     // Collect all articles
     allArticles = [];
-    results.forEach(result => {
+
+    // GDELT (most real-time)
+    if (gdeltArticles.status === 'fulfilled' && gdeltArticles.value.length > 0) {
+        allArticles.push(...gdeltArticles.value);
+        gdeltSourceStatus = { count: gdeltArticles.value.length, status: 'online' };
+    } else {
+        gdeltSourceStatus = { count: 0, status: 'offline' };
+    }
+
+    // X/Twitter
+    if (xArticles.status === 'fulfilled' && xArticles.value.length > 0) {
+        allArticles.push(...xArticles.value);
+        xSourceStatus = { count: xArticles.value.length, status: 'online' };
+    } else {
+        xSourceStatus = { count: 0, status: 'offline' };
+    }
+
+    // RSS sources (including YouTube)
+    rssResults.forEach(result => {
         if (result.status === 'fulfilled' && result.value.length > 0) {
             allArticles.push(...result.value);
         }
@@ -1001,10 +1286,16 @@ async function fetchAllSources() {
     btn.disabled = false;
     btn.textContent = 'Refresh Now';
 
-    const activeCount = NEWS_SOURCES.filter(s => s.status === 'online').length;
+    const activeRSS = NEWS_SOURCES.filter(s => s.status === 'online').length;
+    const gdeltOk = gdeltSourceStatus.status === 'online' ? 1 : 0;
+    const xOk = xSourceStatus.status === 'online' ? 1 : 0;
+    const totalSources = activeRSS + gdeltOk + xOk;
+    const totalPossible = NEWS_SOURCES.length + 2;
     document.getElementById('statusText').textContent =
-        `Monitoring ${activeCount}/${NEWS_SOURCES.length} sources | ${allArticles.length} Iran-related articles | Last update: ${new Date().toLocaleTimeString()}`;
+        `Monitoring ${totalSources}/${totalPossible} sources | ${allArticles.length} articles | GDELT: ${gdeltSourceStatus.count} | X: ${xSourceStatus.count} | Last: ${new Date().toLocaleTimeString()}`;
 }
+
+let gdeltSourceStatus = { count: 0, status: 'loading' };
 
 function deduplicateArticles(articles) {
     const seen = new Set();
@@ -1072,7 +1363,7 @@ function renderNewsFeed() {
             <div class="news-item ${itemClass}">
                 <div class="news-meta">
                     <span class="news-time">${article.dateFormatted}</span>
-                    <span class="news-time-relative">${article.dateRelative}</span>
+                    <span class="news-time-relative" data-timestamp="${article.date.getTime()}">${article.dateRelative}</span>
                     <span class="news-source ${article.sourceCss}">${article.sourceName}</span>
                     ${article.isBreaking ? '<span class="breaking-tag">BREAKING</span>' : ''}
                     ${article.categories.map(c => `<span class="news-category">${c}</span>`).join('')}
@@ -1100,7 +1391,24 @@ function escapeHtml(text) {
 
 function renderSourceStatus() {
     const container = document.getElementById('sourceStatus');
-    container.innerHTML = NEWS_SOURCES.map(source => `
+    // Special sources first
+    let html = `
+        <div class="source-row" style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.1);border-radius:6px;">
+            <div class="source-info">
+                <div class="source-dot ${gdeltSourceStatus.status}"></div>
+                <span class="source-name" style="color:#22c55e;font-weight:600;">⚡ GDELT Real-Time</span>
+            </div>
+            <span class="source-count" style="color:#22c55e;">${gdeltSourceStatus.count} articles</span>
+        </div>
+        <div class="source-row" style="background:rgba(200,200,200,0.03);border:1px solid rgba(200,200,200,0.08);border-radius:6px;">
+            <div class="source-info">
+                <div class="source-dot ${xSourceStatus.status}"></div>
+                <span class="source-name" style="color:#e0e0e0;font-weight:600;">𝕏 X / Twitter</span>
+            </div>
+            <span class="source-count" style="color:#e0e0e0;">${xSourceStatus.count} posts</span>
+        </div>
+    `;
+    html += NEWS_SOURCES.map(source => `
         <div class="source-row">
             <div class="source-info">
                 <div class="source-dot ${source.status}"></div>
@@ -1109,6 +1417,7 @@ function renderSourceStatus() {
             <span class="source-count">${source.articles.length} articles</span>
         </div>
     `).join('');
+    container.innerHTML = html;
 }
 
 function renderTrending() {
@@ -1183,23 +1492,23 @@ function updateStats() {
 // ============================================================
 
 function startCountdown() {
-    countdownValue = 60;
+    countdownValue = 30;
     if (refreshTimer) clearInterval(refreshTimer);
 
     refreshTimer = setInterval(() => {
         countdownValue--;
-        document.getElementById('countdown').textContent = `Next refresh in ${countdownValue}s`;
+        document.getElementById('countdown').textContent = `Auto-refresh in ${countdownValue}s`;
         document.getElementById('nextRefresh').textContent = `${countdownValue}s`;
 
         if (countdownValue <= 0) {
             fetchAllSources();
-            countdownValue = 60;
+            countdownValue = 30;
         }
     }, 1000);
 }
 
 function manualRefresh() {
-    countdownValue = 60;
+    countdownValue = 30;
     fetchAllSources();
 }
 
