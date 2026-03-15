@@ -704,6 +704,45 @@
 
     <!-- Sidebar -->
     <div class="sidebar">
+        <!-- Live Coverage Links -->
+        <div class="sidebar-section">
+            <div class="sidebar-title" style="color:#ef4444;">LIVE COVERAGE (Minute-by-Minute)</div>
+            <div style="display:flex;flex-direction:column;gap:6px;" id="liveLinks">
+                <a href="https://www.theguardian.com/world/live/2025/mar/15/middle-east-crisis-live" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:6px;text-decoration:none;color:#3b82f6;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    Guardian Live Blog
+                </a>
+                <a href="https://www.bbc.com/news/topics/c95yz8vxvy8t" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(187,28,28,0.08);border:1px solid rgba(187,28,28,0.15);border-radius:6px;text-decoration:none;color:#dc2626;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    BBC Middle East Live
+                </a>
+                <a href="https://www.aljazeera.com/tag/iran/" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(210,158,45,0.08);border:1px solid rgba(210,158,45,0.15);border-radius:6px;text-decoration:none;color:#d4a017;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    Al Jazeera Iran Live
+                </a>
+                <a href="https://x.com/search?q=iran%20war&src=typed_query&f=live" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(200,200,200,0.06);border:1px solid rgba(200,200,200,0.12);border-radius:6px;text-decoration:none;color:#e0e0e0;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    𝕏 Live Search: Iran War
+                </a>
+                <a href="https://x.com/search?q=iran%20OR%20hormuz%20OR%20IRGC&src=typed_query&f=live" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(200,200,200,0.06);border:1px solid rgba(200,200,200,0.12);border-radius:6px;text-decoration:none;color:#e0e0e0;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    𝕏 Live: IRGC / Hormuz
+                </a>
+                <a href="https://www.youtube.com/results?search_query=iran+war+live&sp=EgIIAQ%253D%253D" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,0,0,0.06);border:1px solid rgba(255,0,0,0.12);border-radius:6px;text-decoration:none;color:#ff4444;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    YouTube Live Streams
+                </a>
+                <a href="https://news.google.com/search?q=iran%20war&hl=en-US&gl=US&ceid=US%3Aen" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(66,133,244,0.08);border:1px solid rgba(66,133,244,0.15);border-radius:6px;text-decoration:none;color:#4285f4;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    Google News: Iran War
+                </a>
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:8px;line-height:1.5;">
+                Click above for true minute-by-minute updates directly from source.
+                RSS feeds below aggregate articles with ~1-12h delay.
+            </div>
+        </div>
+
         <div class="sidebar-section">
             <div class="sidebar-title">Source Status</div>
             <div class="source-status" id="sourceStatus"></div>
@@ -1232,16 +1271,20 @@ async function fetchAllSources() {
     btn.textContent = 'Fetching...';
     document.getElementById('statusText').textContent = 'Fetching real-time news from GDELT + RSS sources...';
 
-    // Phase 1: RSS sources in parallel (rss2json handles most)
+    // Timeout helper - race any promise against a max wait
+    function withTimeout(promise, ms) {
+        return Promise.race([promise, delay(ms).then(() => [])]);
+    }
+
+    // Phase 1: RSS sources in parallel (max 15s)
     const rssResults = await Promise.allSettled(
-        NEWS_SOURCES.map(source => fetchSource(source))
+        NEWS_SOURCES.map(source => withTimeout(fetchSource(source), 15000))
     );
 
-    // Phase 2: GDELT + X (after RSS to avoid proxy rate limits)
-    await delay(500);
+    // Phase 2: GDELT + X with hard 10s timeout each
     const [gdeltArticles, xArticles] = await Promise.allSettled([
-        fetchGDELT(),
-        fetchXPosts()
+        withTimeout(fetchGDELT(), 10000),
+        withTimeout(fetchXPosts(), 10000)
     ]);
 
     // Collect all articles
@@ -1340,6 +1383,24 @@ function renderNewsFeed() {
     }
 
     let html = '';
+
+    // Freshness banner
+    if (filteredArticles.length > 0) {
+        const newestAge = Date.now() - filteredArticles[0].date.getTime();
+        const newestMins = Math.floor(newestAge / 60000);
+        if (newestMins > 60) {
+            const hrs = Math.floor(newestMins / 60);
+            html += `
+                <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:18px;">⏰</span>
+                    <div>
+                        <div style="font-size:12px;font-weight:600;color:#f59e0b;">Latest article is ${hrs}h ${newestMins % 60}m old</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">RSS feeds have a delay. For minute-by-minute updates, use the <strong style="color:#ef4444;">Live Coverage</strong> links in the sidebar →</div>
+                    </div>
+                </div>`;
+        }
+    }
+
     let lastDateGroup = '';
 
     filteredArticles.forEach((article, i) => {
