@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iran Real-Time News Monitor</title>
+    <style>
+        :root {
+            --bg-dark: #0a0e17;
+            --bg-card: #111827;
+            --bg-card-hover: #1a2332;
+            --border: #1e2d3d;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-red: #ef4444;
+            --accent-green: #22c55e;
+            --accent-blue: #3b82f6;
+            --accent-amber: #f59e0b;
+            --accent-purple: #a855f7;
+            --accent-cyan: #06b6d4;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #f87171, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-red);
+            background: rgba(239, 68, 68, 0.1);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-red);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+        }
+
+        .back-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 12px;
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .back-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--accent-blue);
+        }
+
+        .status-text {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            gap: 24px;
+            padding: 10px 24px;
+            background: rgba(17, 24, 39, 0.7);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.amber { color: var(--accent-amber); }
+        .stat-value.blue { color: var(--accent-blue); }
+
+        /* Source Filter */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: rgba(17, 24, 39, 0.4);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-right: 4px;
+        }
+
+        .filter-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .filter-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--accent-blue);
+        }
+
+        .filter-btn.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .search-input {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 6px;
+            outline: none;
+            width: 220px;
+            margin-left: auto;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            min-height: calc(100vh - 160px);
+        }
+
+        /* News Feed */
+        .feed-container {
+            padding: 16px 24px;
+            overflow-y: auto;
+        }
+
+        .feed-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .feed-title {
+            font-size: 13px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .countdown {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .refresh-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 5px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover { background: var(--bg-card-hover); border-color: var(--accent-blue); }
+        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* News Item */
+        .news-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .news-item:hover {
+            border-color: #2d3f52;
+            transform: translateX(2px);
+        }
+
+        .news-item.breaking {
+            border-left: 3px solid var(--accent-red);
+            background: rgba(239, 68, 68, 0.03);
+        }
+
+        .news-item.high-impact {
+            border-left: 3px solid var(--accent-amber);
+        }
+
+        .news-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .news-time {
+            font-size: 11px;
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .news-time-relative {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .news-source {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .source-reuters { background: rgba(255, 102, 0, 0.15); color: #ff6600; }
+        .source-ap { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+        .source-bbc { background: rgba(187, 28, 28, 0.15); color: #dc2626; }
+        .source-aljazeera { background: rgba(210, 158, 45, 0.15); color: #d4a017; }
+        .source-guardian { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+        .source-france24 { background: rgba(37, 99, 235, 0.15); color: #2563eb; }
+        .source-dw { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
+        .source-cnn { background: rgba(204, 0, 0, 0.15); color: #cc0000; }
+        .source-nyt { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+        .source-google { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
+        .source-default { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
+
+        .news-category {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(168, 85, 247, 0.1);
+            color: var(--accent-purple);
+        }
+
+        .breaking-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+            font-weight: 700;
+            animation: flash 2s infinite;
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .news-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .news-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .news-title a:hover {
+            color: var(--accent-blue);
+        }
+
+        .news-excerpt {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .news-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .news-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(59, 130, 246, 0.08);
+            color: var(--text-muted);
+        }
+
+        .news-tag.oil { background: rgba(245, 158, 11, 0.1); color: var(--accent-amber); }
+        .news-tag.military { background: rgba(239, 68, 68, 0.1); color: var(--accent-red); }
+        .news-tag.nuclear { background: rgba(168, 85, 247, 0.1); color: var(--accent-purple); }
+        .news-tag.sanctions { background: rgba(6, 182, 212, 0.1); color: var(--accent-cyan); }
+        .news-tag.diplomacy { background: rgba(34, 197, 94, 0.1); color: var(--accent-green); }
+
+        /* Time Separator */
+        .time-separator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .time-separator-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .time-separator-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            padding: 2px 12px;
+            background: rgba(59, 130, 246, 0.08);
+            border-radius: 10px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            border-left: 1px solid var(--border);
+            padding: 16px;
+            overflow-y: auto;
+            background: rgba(17, 24, 39, 0.3);
+        }
+
+        .sidebar-section {
+            margin-bottom: 20px;
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Source Status */
+        .source-status {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .source-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .source-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .source-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .source-dot.online { background: var(--accent-green); }
+        .source-dot.offline { background: var(--accent-red); }
+        .source-dot.loading { background: var(--accent-amber); animation: pulse 1s infinite; }
+
+        .source-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .source-count {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Trending Topics */
+        .trending-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .trending-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .trending-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .trending-rank {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            width: 20px;
+        }
+
+        .trending-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex: 1;
+        }
+
+        .trending-count {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Timeline mini */
+        .timeline-mini {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .timeline-mini-item {
+            display: flex;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .timeline-mini-time {
+            font-size: 10px;
+            color: var(--accent-blue);
+            white-space: nowrap;
+            width: 42px;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+
+        .timeline-mini-text {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* Loading */
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 16px;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-text {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Error */
+        .error-msg {
+            padding: 12px 16px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            color: var(--accent-red);
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        /* No results */
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+            .stats-bar { flex-wrap: wrap; gap: 12px; }
+        }
+
+        @media (max-width: 600px) {
+            .feed-container { padding: 12px; }
+            .header { padding: 12px 16px; }
+            .filter-bar { padding: 8px 16px; }
+            .search-input { width: 100%; margin-left: 0; margin-top: 6px; }
+        }
+
+        .disclaimer {
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="header-top">
+        <div>
+            <h1>Iran Real-Time News Monitor</h1>
+            <div class="header-subtitle">Aggregating from Reuters, AP, BBC, Al Jazeera, The Guardian, France24, DW & more</div>
+        </div>
+        <div class="header-controls">
+            <div class="live-badge">
+                <div class="live-dot"></div>
+                LIVE
+            </div>
+            <a href="index.html" class="back-link">Investment Dashboard</a>
+        </div>
+    </div>
+    <div class="status-text" id="statusText">Initializing feeds...</div>
+</header>
+
+<div class="stats-bar">
+    <div class="stat-item">
+        <span class="stat-label">Total Articles:</span>
+        <span class="stat-value blue" id="totalArticles">--</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Sources Active:</span>
+        <span class="stat-value green" id="activeSources">--</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Last Refresh:</span>
+        <span class="stat-value amber" id="lastRefresh">--</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Next Refresh:</span>
+        <span class="stat-value" id="nextRefresh" style="color:var(--text-secondary)">--</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Newest:</span>
+        <span class="stat-value green" id="newestArticle">--</span>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <span class="filter-label">Sources:</span>
+    <button class="filter-btn active" data-source="all" onclick="setFilter('all', this)">All Sources</button>
+    <button class="filter-btn" data-source="reuters" onclick="setFilter('reuters', this)">Reuters</button>
+    <button class="filter-btn" data-source="ap" onclick="setFilter('ap', this)">AP News</button>
+    <button class="filter-btn" data-source="bbc" onclick="setFilter('bbc', this)">BBC</button>
+    <button class="filter-btn" data-source="aljazeera" onclick="setFilter('aljazeera', this)">Al Jazeera</button>
+    <button class="filter-btn" data-source="guardian" onclick="setFilter('guardian', this)">The Guardian</button>
+    <button class="filter-btn" data-source="france24" onclick="setFilter('france24', this)">France24</button>
+    <button class="filter-btn" data-source="dw" onclick="setFilter('dw', this)">DW</button>
+    <button class="filter-btn" data-source="google" onclick="setFilter('google', this)">Google News</button>
+    <input type="text" class="search-input" id="searchInput" placeholder="Search headlines..." oninput="filterNews()">
+</div>
+
+<div class="main-layout">
+
+    <!-- News Feed -->
+    <div class="feed-container" id="feedContainer">
+        <div class="feed-header">
+            <span class="feed-title">Live News Feed</span>
+            <div class="auto-refresh">
+                <span class="countdown" id="countdown">Next refresh in 60s</span>
+                <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()">Refresh Now</button>
+            </div>
+        </div>
+        <div id="newsFeed">
+            <div class="loading-container">
+                <div class="spinner"></div>
+                <div class="loading-text">Fetching latest Iran news from multiple sources...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-title">Source Status</div>
+            <div class="source-status" id="sourceStatus"></div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-title">Trending Topics</div>
+            <div class="trending-list" id="trendingTopics"></div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-title">Key Developments Today</div>
+            <div class="timeline-mini" id="keyDevelopments"></div>
+        </div>
+    </div>
+
+</div>
+
+<div class="disclaimer">
+    News aggregated from public RSS feeds of major international news outlets. Refresh interval: 60 seconds.
+    All content belongs to respective publishers. Click headlines to read full articles.
+</div>
+
+<script>
+// ============================================================
+// NEWS SOURCES — using rss2json.com API (free, reliable, CORS-friendly)
+// Each source uses a direct RSS feed URL converted via rss2json
+// ============================================================
+
+const RSS2JSON_BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
+
+const NEWS_SOURCES = [
+    {
+        id: 'aljazeera',
+        name: 'Al Jazeera',
+        cssClass: 'source-aljazeera',
+        feeds: [
+            'https://www.aljazeera.com/xml/rss/all.xml'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'bbc',
+        name: 'BBC News',
+        cssClass: 'source-bbc',
+        feeds: [
+            'https://feeds.bbci.co.uk/news/world/middle_east/rss.xml'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'reuters',
+        name: 'Reuters',
+        cssClass: 'source-reuters',
+        feeds: [
+            'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'guardian',
+        name: 'The Guardian',
+        cssClass: 'source-guardian',
+        feeds: [
+            'https://www.theguardian.com/world/iran/rss'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'france24',
+        name: 'France24',
+        cssClass: 'source-france24',
+        feeds: [
+            'https://www.france24.com/en/middle-east/rss'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'dw',
+        name: 'DW News',
+        cssClass: 'source-dw',
+        feeds: [
+            'https://rss.dw.com/rdf/rss-en-world'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'ap',
+        name: 'AP News',
+        cssClass: 'source-ap',
+        feeds: [
+            'https://feedx.net/rss/ap.xml'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    {
+        id: 'google',
+        name: 'Google News',
+        cssClass: 'source-google',
+        feeds: [
+            'https://news.google.com/rss/search?q=iran+when:1d&hl=en-US&gl=US&ceid=US:en'
+        ],
+        status: 'loading',
+        articles: []
+    }
+];
+
+let allArticles = [];
+let filteredArticles = [];
+let currentFilter = 'all';
+let refreshTimer = null;
+let countdownValue = 60;
+
+// ============================================================
+// KEYWORD DETECTION
+// ============================================================
+
+const IRAN_KEYWORDS = [
+    'iran', 'iranian', 'tehran', 'irgc', 'khamenei', 'pezeshkian',
+    'persian gulf', 'strait of hormuz', 'hormuz', 'jcpoa', 'nuclear deal',
+    'hezbollah', 'houthi', 'houthis', 'revolutionary guard',
+    'enrichment', 'uranium', 'natanz', 'fordow', 'isfahan',
+    'middle east', 'red sea'
+];
+
+const CATEGORY_KEYWORDS = {
+    military: ['military', 'missile', 'attack', 'strike', 'bomb', 'war', 'troops', 'navy', 'defense', 'combat', 'weapon', 'drone', 'irgc', 'armed', 'force', 'deploy', 'patrol', 'carrier', 'fighter', 'airstrike', 'retaliat'],
+    nuclear: ['nuclear', 'enrichment', 'uranium', 'centrifuge', 'iaea', 'atomic', 'natanz', 'fordow', 'weapons-grade', 'jcpoa', 'nonproliferation'],
+    sanctions: ['sanction', 'embargo', 'restrict', 'treasury', 'asset freeze', 'ban', 'blacklist', 'swift', 'financial restrict', 'trade war'],
+    oil: ['oil', 'crude', 'petroleum', 'barrel', 'brent', 'opec', 'energy', 'refin', 'pipeline', 'tanker', 'fuel', 'gas price'],
+    diplomacy: ['diplomacy', 'diplomatic', 'negotiat', 'talks', 'deal', 'agreement', 'summit', 'ambassador', 'treaty', 'peace', 'de-escalat', 'mediati', 'dialogue']
+};
+
+const BREAKING_KEYWORDS = ['breaking', 'urgent', 'just in', 'attack', 'strike', 'explosion', 'war', 'conflict', 'missile launch', 'retaliat'];
+
+function classifyArticle(title, desc) {
+    const text = (title + ' ' + desc).toLowerCase();
+    const categories = [];
+    const tags = [];
+
+    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        if (keywords.some(kw => text.includes(kw))) {
+            categories.push(cat);
+            tags.push(cat);
+        }
+    }
+
+    const isBreaking = BREAKING_KEYWORDS.some(kw => text.includes(kw));
+    const isIranRelated = IRAN_KEYWORDS.some(kw => text.includes(kw));
+
+    return { categories, tags, isBreaking, isIranRelated };
+}
+
+function getRelativeTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+}
+
+// ============================================================
+// FETCH USING rss2json.com API
+// ============================================================
+
+async function fetchFeed(feedUrl, source) {
+    const apiUrl = RSS2JSON_BASE + encodeURIComponent(feedUrl);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.status !== 'ok' || !data.items) {
+        throw new Error(data.message || 'Invalid response');
+    }
+
+    return data.items;
+}
+
+function processItems(items, source) {
+    const articles = [];
+    const seenTitles = new Set();
+
+    for (const item of items) {
+        const title = (item.title || '').trim();
+        if (!title) continue;
+
+        // Dedupe within source
+        const normTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 50);
+        if (seenTitles.has(normTitle)) continue;
+        seenTitles.add(normTitle);
+
+        const link = item.link || '';
+        const desc = (item.description || item.content || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&[^;]+;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 300);
+
+        const date = item.pubDate ? new Date(item.pubDate) : new Date();
+        const classification = classifyArticle(title, desc);
+
+        // For non-Iran-specific feeds, filter to Iran-related only
+        const iranSpecificSources = ['guardian']; // guardian/iran feed is already filtered
+        if (!iranSpecificSources.includes(source.id) && !classification.isIranRelated) continue;
+
+        // Detect actual source from Google News
+        let sourceName = source.name;
+        if (source.id === 'google' && item.author) {
+            sourceName = item.author;
+        }
+
+        articles.push({
+            id: link || title,
+            title,
+            link,
+            description: desc,
+            date,
+            dateFormatted: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            dateRelative: getRelativeTime(date),
+            source: source.id,
+            sourceName,
+            sourceCss: source.cssClass,
+            ...classification
+        });
+    }
+
+    return articles;
+}
+
+async function fetchSource(source) {
+    source.status = 'loading';
+    source.articles = [];
+
+    for (const feedUrl of source.feeds) {
+        try {
+            const items = await fetchFeed(feedUrl, source);
+            const articles = processItems(items, source);
+            source.articles.push(...articles);
+        } catch (err) {
+            console.warn(`Feed failed for ${source.name} (${feedUrl}):`, err.message);
+        }
+    }
+
+    source.status = source.articles.length > 0 ? 'online' : 'offline';
+    return source.articles;
+}
+
+async function fetchAllSources() {
+    const btn = document.getElementById('refreshBtn');
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+    document.getElementById('statusText').textContent = 'Fetching latest news from all sources...';
+
+    // Fetch all sources in parallel
+    const results = await Promise.allSettled(
+        NEWS_SOURCES.map(source => fetchSource(source))
+    );
+
+    // Collect all articles
+    allArticles = [];
+    results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value.length > 0) {
+            allArticles.push(...result.value);
+        }
+    });
+
+    // Sort by date, newest first
+    allArticles.sort((a, b) => b.date - a.date);
+
+    // Global deduplication by similar titles
+    allArticles = deduplicateArticles(allArticles);
+
+    // Update UI
+    filterNews();
+    renderSourceStatus();
+    renderTrending();
+    renderKeyDevelopments();
+    updateStats();
+
+    btn.disabled = false;
+    btn.textContent = 'Refresh Now';
+
+    const activeCount = NEWS_SOURCES.filter(s => s.status === 'online').length;
+    document.getElementById('statusText').textContent =
+        `Monitoring ${activeCount}/${NEWS_SOURCES.length} sources | ${allArticles.length} Iran-related articles | Last update: ${new Date().toLocaleTimeString()}`;
+}
+
+function deduplicateArticles(articles) {
+    const seen = new Set();
+    return articles.filter(article => {
+        const normalized = article.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 50);
+        if (seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+    });
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+
+function filterNews() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+    filteredArticles = allArticles.filter(article => {
+        if (currentFilter !== 'all' && article.source !== currentFilter) return false;
+        if (searchTerm && !article.title.toLowerCase().includes(searchTerm) &&
+            !article.description.toLowerCase().includes(searchTerm)) return false;
+        return true;
+    });
+
+    renderNewsFeed();
+}
+
+function setFilter(source, btn) {
+    currentFilter = source;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterNews();
+}
+
+function renderNewsFeed() {
+    const container = document.getElementById('newsFeed');
+
+    if (filteredArticles.length === 0) {
+        container.innerHTML = `<div class="no-results">No Iran-related articles found right now. Try "All Sources" or wait for the next refresh.</div>`;
+        return;
+    }
+
+    let html = '';
+    let lastDateGroup = '';
+
+    filteredArticles.forEach((article, i) => {
+        const dateGroup = article.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        if (dateGroup !== lastDateGroup) {
+            lastDateGroup = dateGroup;
+            if (i > 0) {
+                html += `
+                    <div class="time-separator">
+                        <div class="time-separator-line"></div>
+                        <span class="time-separator-text">${dateGroup}</span>
+                        <div class="time-separator-line"></div>
+                    </div>`;
+            }
+        }
+
+        const itemClass = article.isBreaking ? 'breaking' :
+                          (article.categories.includes('military') ? 'high-impact' : '');
+
+        html += `
+            <div class="news-item ${itemClass}">
+                <div class="news-meta">
+                    <span class="news-time">${article.dateFormatted}</span>
+                    <span class="news-time-relative">${article.dateRelative}</span>
+                    <span class="news-source ${article.sourceCss}">${article.sourceName}</span>
+                    ${article.isBreaking ? '<span class="breaking-tag">BREAKING</span>' : ''}
+                    ${article.categories.map(c => `<span class="news-category">${c}</span>`).join('')}
+                </div>
+                <div class="news-title">
+                    <a href="${article.link}" target="_blank" rel="noopener">${escapeHtml(article.title)}</a>
+                </div>
+                ${article.description ? `<div class="news-excerpt">${escapeHtml(article.description.slice(0, 200))}${article.description.length > 200 ? '...' : ''}</div>` : ''}
+                ${article.tags.length > 0 ? `
+                    <div class="news-tags">
+                        ${article.tags.map(t => `<span class="news-tag ${t}">${t}</span>`).join('')}
+                    </div>
+                ` : ''}
+            </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function renderSourceStatus() {
+    const container = document.getElementById('sourceStatus');
+    container.innerHTML = NEWS_SOURCES.map(source => `
+        <div class="source-row">
+            <div class="source-info">
+                <div class="source-dot ${source.status}"></div>
+                <span class="source-name">${source.name}</span>
+            </div>
+            <span class="source-count">${source.articles.length} articles</span>
+        </div>
+    `).join('');
+}
+
+function renderTrending() {
+    const topicCount = {};
+
+    allArticles.forEach(article => {
+        article.tags.forEach(tag => {
+            topicCount[tag] = (topicCount[tag] || 0) + 1;
+        });
+
+        const titleWords = article.title.toLowerCase();
+        const entities = ['iran', 'israel', 'us', 'china', 'russia', 'saudi', 'iaea', 'un',
+                         'oil', 'nuclear', 'sanctions', 'military', 'houthi', 'hezbollah', 'hormuz',
+                         'trump', 'biden', 'netanyahu', 'gaza', 'syria', 'iraq', 'yemen'];
+        entities.forEach(e => {
+            if (titleWords.includes(e)) {
+                const label = e.charAt(0).toUpperCase() + e.slice(1);
+                topicCount[label] = (topicCount[label] || 0) + 1;
+            }
+        });
+    });
+
+    const sorted = Object.entries(topicCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const container = document.getElementById('trendingTopics');
+
+    if (sorted.length === 0) {
+        container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Analyzing topics...</div>';
+        return;
+    }
+
+    container.innerHTML = sorted.map(([topic, count], i) => `
+        <div class="trending-item" onclick="document.getElementById('searchInput').value='${topic.toLowerCase()}'; filterNews();">
+            <span class="trending-rank">${i + 1}</span>
+            <span class="trending-text">${topic}</span>
+            <span class="trending-count">${count}</span>
+        </div>
+    `).join('');
+}
+
+function renderKeyDevelopments() {
+    const container = document.getElementById('keyDevelopments');
+    const keyItems = allArticles
+        .filter(a => a.categories.length > 0)
+        .slice(0, 10);
+
+    if (keyItems.length === 0) {
+        container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Waiting for data...</div>';
+        return;
+    }
+
+    container.innerHTML = keyItems.map(article => `
+        <div class="timeline-mini-item">
+            <span class="timeline-mini-time">${article.dateFormatted}</span>
+            <span class="timeline-mini-text">${escapeHtml(article.title.slice(0, 80))}${article.title.length > 80 ? '...' : ''}</span>
+        </div>
+    `).join('');
+}
+
+function updateStats() {
+    const activeCount = NEWS_SOURCES.filter(s => s.status === 'online').length;
+    document.getElementById('totalArticles').textContent = allArticles.length;
+    document.getElementById('activeSources').textContent = `${activeCount}/${NEWS_SOURCES.length}`;
+    document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
+
+    if (allArticles.length > 0) {
+        document.getElementById('newestArticle').textContent = allArticles[0].dateRelative;
+    }
+}
+
+// ============================================================
+// AUTO-REFRESH TIMER (every 60 seconds)
+// ============================================================
+
+function startCountdown() {
+    countdownValue = 60;
+    if (refreshTimer) clearInterval(refreshTimer);
+
+    refreshTimer = setInterval(() => {
+        countdownValue--;
+        document.getElementById('countdown').textContent = `Next refresh in ${countdownValue}s`;
+        document.getElementById('nextRefresh').textContent = `${countdownValue}s`;
+
+        if (countdownValue <= 0) {
+            fetchAllSources();
+            countdownValue = 60;
+        }
+    }, 1000);
+}
+
+function manualRefresh() {
+    countdownValue = 60;
+    fetchAllSources();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+async function init() {
+    renderSourceStatus();
+    await fetchAllSources();
+    startCountdown();
+}
+
+init();
+</script>
+</body>
+</html>
