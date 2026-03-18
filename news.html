@@ -321,6 +321,7 @@
         .source-france24 { background: rgba(37, 99, 235, 0.15); color: #2563eb; }
         .source-dw { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
         .source-cnn { background: rgba(204, 0, 0, 0.15); color: #cc0000; }
+        .source-foxnews { background: rgba(0, 51, 160, 0.15); color: #4a90d9; }
         .source-nyt { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
         .source-google { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
         .source-gdelt { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
@@ -630,7 +631,7 @@
     <div class="header-top">
         <div>
             <h1>Iran Real-Time News Monitor</h1>
-            <div class="header-subtitle">⚡ GDELT real-time + 𝕏 X/Twitter + ▶ YouTube + BBC, Al Jazeera, Guardian, France24, DW, AP, Google News</div>
+            <div class="header-subtitle">⚡ GDELT real-time + 𝕏 X/Twitter + ▶ YouTube + BBC, Al Jazeera, Guardian, France24, DW, AP, CNN, Fox News, Google News</div>
         </div>
         <div class="header-controls">
             <div class="live-badge">
@@ -676,6 +677,8 @@
     <button class="filter-btn" data-source="guardian" onclick="setFilter('guardian', this)">The Guardian</button>
     <button class="filter-btn" data-source="france24" onclick="setFilter('france24', this)">France24</button>
     <button class="filter-btn" data-source="dw" onclick="setFilter('dw', this)">DW</button>
+    <button class="filter-btn" data-source="cnn" onclick="setFilter('cnn', this)" style="border-color:rgba(204,0,0,0.3);">CNN</button>
+    <button class="filter-btn" data-source="foxnews" onclick="setFilter('foxnews', this)" style="border-color:rgba(0,51,160,0.3);">Fox News</button>
     <button class="filter-btn" data-source="google" onclick="setFilter('google', this)">Google News</button>
     <button class="filter-btn" data-source="youtube" onclick="setFilter('youtube', this)" style="border-color:rgba(255,0,0,0.3);">▶ YouTube</button>
     <button class="filter-btn" data-source="x" onclick="setFilter('x', this)" style="border-color:rgba(200,200,200,0.3);">𝕏 X/Twitter</button>
@@ -720,6 +723,14 @@
                     <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
                     Al Jazeera Iran Live
                 </a>
+                <a href="https://www.cnn.com/middleeast" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(204,0,0,0.08);border:1px solid rgba(204,0,0,0.15);border-radius:6px;text-decoration:none;color:#cc0000;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    CNN Middle East Live
+                </a>
+                <a href="https://www.foxnews.com/category/world/conflicts/iran" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,51,160,0.08);border:1px solid rgba(0,51,160,0.15);border-radius:6px;text-decoration:none;color:#4a90d9;font-size:11px;font-weight:600;transition:all .2s;">
+                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
+                    Fox News Iran Coverage
+                </a>
                 <a href="https://x.com/search?q=iran%20war&src=typed_query&f=live" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(200,200,200,0.06);border:1px solid rgba(200,200,200,0.12);border-radius:6px;text-decoration:none;color:#e0e0e0;font-size:11px;font-weight:600;transition:all .2s;">
                     <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;"></span>
                     𝕏 Live Search: Iran War
@@ -762,7 +773,7 @@
 </div>
 
 <div class="disclaimer">
-    News aggregated from public RSS feeds of major international news outlets. Auto-refresh every 30 seconds. Relative times update every 15 seconds.
+    News aggregated from public RSS feeds of major international news outlets including CNN, Fox News, BBC, Al Jazeera, and more. Auto-refresh every 60 seconds with proxy rotation for maximum freshness.
     All content belongs to respective publishers. Click headlines to read full articles.
 </div>
 
@@ -776,19 +787,68 @@
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 let requestCount = 0;
 
-// Primary proxy: rss2json (most reliable, handles RSS+Atom)
-const RSS2JSON = url => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&_t=${Date.now()}`;
-// Fallback proxy
-const CODETABS = url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+// ============================================================
+// MULTI-PROXY STRATEGY — rotate proxies to avoid rate limiting & caching
+// Each proxy has different cache TTLs, so we try multiple for freshest data
+// ============================================================
+const PROXIES = [
+    { name: 'rss2json', fn: url => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&_t=${Date.now()}`, type: 'json' },
+    { name: 'allorigins', fn: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_t=${Date.now()}`, type: 'xml' },
+    { name: 'codetabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, type: 'xml' },
+    { name: 'corsproxy', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}`, type: 'xml' },
+];
+
+let proxyIndex = 0; // Rotate which proxy goes first
 
 const NEWS_SOURCES = [
+    // ---- GOOGLE NEWS (FASTEST — indexes within minutes) ----
+    {
+        id: 'google',
+        name: 'Google News',
+        cssClass: 'source-google',
+        feeds: [
+            // Ultra-fresh: last 1 hour
+            'https://news.google.com/rss/search?q=iran+war+OR+iran+strike+OR+iran+attack+when:1h&hl=en-US&gl=US&ceid=US:en',
+            // Recent: last 4 hours
+            'https://news.google.com/rss/search?q=iran+oil+OR+iran+nuclear+OR+iran+military+when:4h&hl=en-US&gl=US&ceid=US:en',
+            // Broader catch: last 8 hours
+            'https://news.google.com/rss/search?q=iran+when:8h&hl=en-US&gl=US&ceid=US:en',
+            // Hormuz / Houthi specific
+            'https://news.google.com/rss/search?q=hormuz+OR+houthi+OR+hezbollah+when:4h&hl=en-US&gl=US&ceid=US:en',
+        ],
+        status: 'loading',
+        articles: []
+    },
+    // ---- CNN ----
+    {
+        id: 'cnn',
+        name: 'CNN',
+        cssClass: 'source-cnn',
+        feeds: [
+            'http://rss.cnn.com/rss/edition_meast.rss',
+            'http://rss.cnn.com/rss/edition_world.rss'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    // ---- FOX NEWS ----
+    {
+        id: 'foxnews',
+        name: 'Fox News',
+        cssClass: 'source-foxnews',
+        feeds: [
+            'https://moxie.foxnews.com/google-publisher/world.xml',
+            'https://moxie.foxnews.com/google-publisher/politics.xml'
+        ],
+        status: 'loading',
+        articles: []
+    },
+    // ---- INDIVIDUAL OUTLETS ----
     {
         id: 'aljazeera',
         name: 'Al Jazeera',
         cssClass: 'source-aljazeera',
-        feeds: [
-            'https://www.aljazeera.com/xml/rss/all.xml'
-        ],
+        feeds: ['https://www.aljazeera.com/xml/rss/all.xml'],
         status: 'loading',
         articles: []
     },
@@ -796,9 +856,7 @@ const NEWS_SOURCES = [
         id: 'bbc',
         name: 'BBC News',
         cssClass: 'source-bbc',
-        feeds: [
-            'https://feeds.bbci.co.uk/news/world/middle_east/rss.xml'
-        ],
+        feeds: ['https://feeds.bbci.co.uk/news/world/middle_east/rss.xml'],
         status: 'loading',
         articles: []
     },
@@ -806,9 +864,7 @@ const NEWS_SOURCES = [
         id: 'guardian',
         name: 'The Guardian',
         cssClass: 'source-guardian',
-        feeds: [
-            'https://www.theguardian.com/world/iran/rss'
-        ],
+        feeds: ['https://www.theguardian.com/world/iran/rss'],
         status: 'loading',
         articles: []
     },
@@ -816,9 +872,7 @@ const NEWS_SOURCES = [
         id: 'france24',
         name: 'France24',
         cssClass: 'source-france24',
-        feeds: [
-            'https://www.france24.com/en/middle-east/rss'
-        ],
+        feeds: ['https://www.france24.com/en/middle-east/rss'],
         status: 'loading',
         articles: []
     },
@@ -826,9 +880,7 @@ const NEWS_SOURCES = [
         id: 'dw',
         name: 'DW News',
         cssClass: 'source-dw',
-        feeds: [
-            'https://rss.dw.com/rdf/rss-en-world'
-        ],
+        feeds: ['https://rss.dw.com/rdf/rss-en-world'],
         status: 'loading',
         articles: []
     },
@@ -836,20 +888,7 @@ const NEWS_SOURCES = [
         id: 'ap',
         name: 'AP News',
         cssClass: 'source-ap',
-        feeds: [
-            'https://feedx.net/rss/ap.xml'
-        ],
-        status: 'loading',
-        articles: []
-    },
-    {
-        id: 'google',
-        name: 'Google News',
-        cssClass: 'source-google',
-        feeds: [
-            'https://news.google.com/rss/search?q=iran+war+OR+iran+strike+OR+iran+nuclear+when:3h&hl=en-US&gl=US&ceid=US:en',
-            'https://news.google.com/rss/search?q=iran+when:12h&hl=en-US&gl=US&ceid=US:en'
-        ],
+        feeds: ['https://feedx.net/rss/ap.xml'],
         status: 'loading',
         articles: []
     },
@@ -857,9 +896,7 @@ const NEWS_SOURCES = [
         id: 'reuters',
         name: 'Reuters',
         cssClass: 'source-reuters',
-        feeds: [
-            'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best'
-        ],
+        feeds: ['https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best'],
         status: 'loading',
         articles: []
     },
@@ -868,14 +905,12 @@ const NEWS_SOURCES = [
         name: 'YouTube',
         cssClass: 'source-youtube',
         feeds: [
-            // Al Jazeera English (most active on Iran)
-            'https://www.youtube.com/feeds/videos.xml?channel_id=UCNye-wNBqNL5ZzHSJj3l8Bg',
-            // WION (great Iran/Middle East coverage)
-            'https://www.youtube.com/feeds/videos.xml?channel_id=UC_gUM8rL-Lrg6O3adPW9K1g',
-            // Sky News
-            'https://www.youtube.com/feeds/videos.xml?channel_id=UCoMdktPbSTixAyNGwb-UYkQ',
-            // TRT World
-            'https://www.youtube.com/feeds/videos.xml?channel_id=UC7fWeaHhqgM4Lba7TKVZ4GA',
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCNye-wNBqNL5ZzHSJj3l8Bg', // Al Jazeera
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UC_gUM8rL-Lrg6O3adPW9K1g', // WION
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCoMdktPbSTixAyNGwb-UYkQ', // Sky News
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UC7fWeaHhqgM4Lba7TKVZ4GA', // TRT World
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCupvZG-5ko_eiXAupbDfxWw', // CNN
+            'https://www.youtube.com/feeds/videos.xml?channel_id=UCXIJgqnII2ZOINSWNOGFThA', // Fox News
         ],
         status: 'loading',
         articles: []
@@ -892,8 +927,9 @@ async function fetchXPosts() {
 
     // Use Google News RSS to find Iran tweets being reported
     const xFeeds = [
-        'https://news.google.com/rss/search?q=iran+site:x.com+OR+site:twitter.com+when:1d&hl=en-US&gl=US&ceid=US:en',
-        'https://news.google.com/rss/search?q=iran+war+OSINT+OR+breaking+when:3h&hl=en-US&gl=US&ceid=US:en',
+        'https://news.google.com/rss/search?q=iran+site:x.com+OR+site:twitter.com+when:4h&hl=en-US&gl=US&ceid=US:en',
+        'https://news.google.com/rss/search?q=iran+war+OSINT+OR+breaking+when:2h&hl=en-US&gl=US&ceid=US:en',
+        'https://news.google.com/rss/search?q=iran+OR+hormuz+OR+IRGC+site:x.com+when:8h&hl=en-US&gl=US&ceid=US:en',
     ];
 
     for (const feedUrl of xFeeds) {
@@ -1053,11 +1089,14 @@ async function fetchGDELT() {
 // ============================================================
 
 const IRAN_KEYWORDS = [
-    'iran', 'iranian', 'tehran', 'irgc', 'khamenei', 'pezeshkian',
+    'iran', 'iranian', 'tehran', 'irgc', 'khamenei', 'pezeshkian', 'mojtaba',
     'persian gulf', 'strait of hormuz', 'hormuz', 'jcpoa', 'nuclear deal',
     'hezbollah', 'houthi', 'houthis', 'revolutionary guard',
     'enrichment', 'uranium', 'natanz', 'fordow', 'isfahan',
-    'middle east', 'red sea'
+    'middle east', 'red sea', 'bandar abbas', 'bushehr',
+    'proxy war', 'axis of resistance', 'quds force',
+    'oil price', 'crude oil', 'brent crude',
+    'centcom', 'fifth fleet', 'carrier strike'
 ];
 
 const CATEGORY_KEYWORDS = {
@@ -1154,36 +1193,35 @@ function parseRSSFromXML(xmlText) {
 }
 
 async function fetchWithProxy(feedUrl) {
-    // Try rss2json first (best for RSS/Atom feeds)
-    try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(RSS2JSON(feedUrl), {
-            signal: controller.signal, cache: 'no-store'
-        });
-        clearTimeout(timeout);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.status === 'ok' && data.items && data.items.length > 0) return data.items;
-        }
-    } catch (e) { /* try fallback */ }
+    // Rotate starting proxy each refresh cycle to spread load & avoid cached stale data
+    const startIdx = proxyIndex % PROXIES.length;
 
-    // Fallback: codetabs proxy (returns raw XML)
-    try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(CODETABS(feedUrl), {
-            signal: controller.signal, cache: 'no-store'
-        });
-        clearTimeout(timeout);
-        if (response.ok) {
-            const text = await response.text();
-            const items = parseRSSFromXML(text);
-            if (items.length > 0) return items;
-        }
-    } catch (e) { /* give up */ }
+    for (let i = 0; i < PROXIES.length; i++) {
+        const proxy = PROXIES[(startIdx + i) % PROXIES.length];
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            const proxyUrl = proxy.fn(feedUrl);
+            const response = await fetch(proxyUrl, {
+                signal: controller.signal,
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+            });
+            clearTimeout(timeout);
+            if (!response.ok) continue;
 
-    throw new Error('All proxies failed');
+            if (proxy.type === 'json') {
+                const data = await response.json();
+                if (data.status === 'ok' && data.items && data.items.length > 0) return data.items;
+            } else {
+                const text = await response.text();
+                const items = parseRSSFromXML(text);
+                if (items.length > 0) return items;
+            }
+        } catch (e) { /* try next proxy */ }
+    }
+
+    throw new Error('All proxies failed for ' + feedUrl);
 }
 
 async function fetchFeed(feedUrl, source) {
@@ -1215,7 +1253,7 @@ function processItems(items, source) {
         const classification = classifyArticle(title, desc);
 
         // For non-Iran-specific feeds, filter to Iran-related only
-        const iranSpecificSources = ['guardian'];
+        const iranSpecificSources = ['guardian', 'google'];
         if (!iranSpecificSources.includes(source.id) && !classification.isIranRelated) continue;
 
         // Detect actual source from Google News
@@ -1269,46 +1307,47 @@ async function fetchAllSources() {
     const btn = document.getElementById('refreshBtn');
     btn.disabled = true;
     btn.textContent = 'Fetching...';
-    document.getElementById('statusText').textContent = 'Fetching real-time news from GDELT + RSS sources...';
+    document.getElementById('statusText').textContent = 'Fetching real-time news from all sources...';
 
-    // Timeout helper - race any promise against a max wait
+    // Rotate proxy starting point each refresh to beat caching
+    proxyIndex = (proxyIndex + 1) % PROXIES.length;
+
+    // Timeout helper
     function withTimeout(promise, ms) {
         return Promise.race([promise, delay(ms).then(() => [])]);
     }
 
-    // Phase 1: RSS sources in parallel (max 15s)
-    const rssResults = await Promise.allSettled(
-        NEWS_SOURCES.map(source => withTimeout(fetchSource(source), 15000))
-    );
-
-    // Phase 2: GDELT + X with hard 10s timeout each
-    const [gdeltArticles, xArticles] = await Promise.allSettled([
-        withTimeout(fetchGDELT(), 10000),
-        withTimeout(fetchXPosts(), 10000)
+    // ALL sources + GDELT + X in parallel for maximum speed
+    const [rssResults, gdeltArticles, xArticles] = await Promise.all([
+        Promise.allSettled(NEWS_SOURCES.map(source => withTimeout(fetchSource(source), 12000))),
+        withTimeout(fetchGDELT(), 10000).catch(() => []),
+        withTimeout(fetchXPosts(), 10000).catch(() => [])
     ]);
 
     // Collect all articles
     allArticles = [];
 
-    // GDELT (most real-time)
-    if (gdeltArticles.status === 'fulfilled' && gdeltArticles.value.length > 0) {
-        allArticles.push(...gdeltArticles.value);
-        gdeltSourceStatus = { count: gdeltArticles.value.length, status: 'online' };
+    // GDELT
+    const gdeltArr = Array.isArray(gdeltArticles) ? gdeltArticles : [];
+    if (gdeltArr.length > 0) {
+        allArticles.push(...gdeltArr);
+        gdeltSourceStatus = { count: gdeltArr.length, status: 'online' };
     } else {
         gdeltSourceStatus = { count: 0, status: 'offline' };
     }
 
     // X/Twitter
-    if (xArticles.status === 'fulfilled' && xArticles.value.length > 0) {
-        allArticles.push(...xArticles.value);
-        xSourceStatus = { count: xArticles.value.length, status: 'online' };
+    const xArr = Array.isArray(xArticles) ? xArticles : [];
+    if (xArr.length > 0) {
+        allArticles.push(...xArr);
+        xSourceStatus = { count: xArr.length, status: 'online' };
     } else {
         xSourceStatus = { count: 0, status: 'offline' };
     }
 
-    // RSS sources (including YouTube)
+    // RSS sources (including YouTube, CNN, Fox News)
     rssResults.forEach(result => {
-        if (result.status === 'fulfilled' && result.value.length > 0) {
+        if (result.status === 'fulfilled' && Array.isArray(result.value) && result.value.length > 0) {
             allArticles.push(...result.value);
         }
     });
@@ -1553,7 +1592,7 @@ function updateStats() {
 // ============================================================
 
 function startCountdown() {
-    countdownValue = 30;
+    countdownValue = 60;
     if (refreshTimer) clearInterval(refreshTimer);
 
     refreshTimer = setInterval(() => {
@@ -1563,13 +1602,13 @@ function startCountdown() {
 
         if (countdownValue <= 0) {
             fetchAllSources();
-            countdownValue = 30;
+            countdownValue = 60;
         }
     }, 1000);
 }
 
 function manualRefresh() {
-    countdownValue = 30;
+    countdownValue = 60;
     fetchAllSources();
 }
 
