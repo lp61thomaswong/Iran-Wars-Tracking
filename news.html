@@ -788,17 +788,19 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 let requestCount = 0;
 
 // ============================================================
-// MULTI-PROXY STRATEGY — rotate proxies to avoid rate limiting & caching
-// Each proxy has different cache TTLs, so we try multiple for freshest data
+// MULTI-PROXY STRATEGY — distribute feeds across proxies to avoid rate limiting
+// Each source gets assigned a different proxy to spread the load
 // ============================================================
 const PROXIES = [
     { name: 'rss2json', fn: url => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&_t=${Date.now()}`, type: 'json' },
     { name: 'allorigins', fn: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_t=${Date.now()}`, type: 'xml' },
     { name: 'codetabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, type: 'xml' },
     { name: 'corsproxy', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}`, type: 'xml' },
+    { name: 'thingproxy', fn: url => `https://thingproxy.freeboard.io/fetch/${url}`, type: 'xml' },
 ];
 
 let proxyIndex = 0; // Rotate which proxy goes first
+let feedCounter = 0; // Distribute feeds across proxies
 
 const NEWS_SOURCES = [
     // ---- GOOGLE NEWS (FASTEST — indexes within minutes) ----
@@ -807,14 +809,10 @@ const NEWS_SOURCES = [
         name: 'Google News',
         cssClass: 'source-google',
         feeds: [
-            // Ultra-fresh: last 1 hour
-            'https://news.google.com/rss/search?q=iran+war+OR+iran+strike+OR+iran+attack+when:1h&hl=en-US&gl=US&ceid=US:en',
-            // Recent: last 4 hours
-            'https://news.google.com/rss/search?q=iran+oil+OR+iran+nuclear+OR+iran+military+when:4h&hl=en-US&gl=US&ceid=US:en',
-            // Broader catch: last 8 hours
-            'https://news.google.com/rss/search?q=iran+when:8h&hl=en-US&gl=US&ceid=US:en',
-            // Hormuz / Houthi specific
-            'https://news.google.com/rss/search?q=hormuz+OR+houthi+OR+hezbollah+when:4h&hl=en-US&gl=US&ceid=US:en',
+            // Comprehensive recent: last 4 hours
+            'https://news.google.com/rss/search?q=iran+war+OR+iran+strike+OR+iran+attack+OR+iran+military+when:4h&hl=en-US&gl=US&ceid=US:en',
+            // Broader catch with more terms
+            'https://news.google.com/rss/search?q=iran+OR+hormuz+OR+houthi+OR+hezbollah+when:8h&hl=en-US&gl=US&ceid=US:en',
         ],
         status: 'loading',
         articles: []
@@ -1193,8 +1191,10 @@ function parseRSSFromXML(xmlText) {
 }
 
 async function fetchWithProxy(feedUrl) {
-    // Rotate starting proxy each refresh cycle to spread load & avoid cached stale data
-    const startIdx = proxyIndex % PROXIES.length;
+    // Each feed gets a DIFFERENT starting proxy to spread load across all proxies
+    // This prevents hammering one proxy with all requests simultaneously
+    const myIndex = feedCounter++;
+    const startIdx = (proxyIndex + myIndex) % PROXIES.length;
 
     for (let i = 0; i < PROXIES.length; i++) {
         const proxy = PROXIES[(startIdx + i) % PROXIES.length];
@@ -1205,7 +1205,6 @@ async function fetchWithProxy(feedUrl) {
             const response = await fetch(proxyUrl, {
                 signal: controller.signal,
                 cache: 'no-store',
-                headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
             });
             clearTimeout(timeout);
             if (!response.ok) continue;
@@ -1215,6 +1214,8 @@ async function fetchWithProxy(feedUrl) {
                 if (data.status === 'ok' && data.items && data.items.length > 0) return data.items;
             } else {
                 const text = await response.text();
+                // Check if we got an error page instead of RSS
+                if (text.includes('automated queries') || text.includes('<!DOCTYPE') || text.length < 100) continue;
                 const items = parseRSSFromXML(text);
                 if (items.length > 0) return items;
             }
@@ -1311,15 +1312,32 @@ async function fetchAllSources() {
 
     // Rotate proxy starting point each refresh to beat caching
     proxyIndex = (proxyIndex + 1) % PROXIES.length;
+    feedCounter = 0; // Reset feed distribution counter
 
     // Timeout helper
     function withTimeout(promise, ms) {
         return Promise.race([promise, delay(ms).then(() => [])]);
     }
 
-    // ALL sources + GDELT + X in parallel for maximum speed
-    const [rssResults, gdeltArticles, xArticles] = await Promise.all([
-        Promise.allSettled(NEWS_SOURCES.map(source => withTimeout(fetchSource(source), 12000))),
+    // WAVE-BASED FETCHING: fetch 3-4 sources at a time to avoid overwhelming proxies
+    const waves = [];
+    const WAVE_SIZE = 3;
+    for (let i = 0; i < NEWS_SOURCES.length; i += WAVE_SIZE) {
+        waves.push(NEWS_SOURCES.slice(i, i + WAVE_SIZE));
+    }
+
+    const rssResults = [];
+    for (const wave of waves) {
+        const waveResults = await Promise.allSettled(
+            wave.map(source => withTimeout(fetchSource(source), 12000))
+        );
+        rssResults.push(...waveResults);
+        // Small pause between waves to let proxy rate limits recover
+        if (waves.indexOf(wave) < waves.length - 1) await delay(500);
+    }
+
+    // GDELT + X after RSS waves (separate proxy budget)
+    const [gdeltArticles, xArticles] = await Promise.all([
         withTimeout(fetchGDELT(), 10000).catch(() => []),
         withTimeout(fetchXPosts(), 10000).catch(() => [])
     ]);
